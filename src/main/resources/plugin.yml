@@ -1,0 +1,9 @@
+name: Orders
+version: 1.0
+main: de.Fyral.ordersPlugin.OrdersPlugin
+api-version: 1.21
+author: Fyral
+commands:
+  orders:
+    description: Öffnet das Handelsmenü.
+    aliases: [order] # <--- Das hier hinzufügen!
