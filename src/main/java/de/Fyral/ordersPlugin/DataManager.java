@@ -21,6 +21,11 @@ public class DataManager {
     }
 
     public void setup() {
+        // NEU: Erstellt den Plugin-Ordner, falls er nicht existiert
+        if (!plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdirs();
+        }
+
         file = new File(plugin.getDataFolder(), "orders.yml");
         if (!file.exists()) {
             try { file.createNewFile(); } catch (IOException e) { e.printStackTrace(); }

@@ -7,6 +7,9 @@ import org.bukkit.event.EventHandler; // WICHTIG
 import org.bukkit.event.Listener;     // WICHTIG
 import org.bukkit.event.player.PlayerJoinEvent; // WICHTIG
 import org.bukkit.plugin.java.JavaPlugin;
+import de.Fyral.ordersPlugin.ah.AhManager;
+import de.Fyral.ordersPlugin.ah.AhGUI;
+import de.Fyral.ordersPlugin.ah.AhCommand;
 
 // Wir fügen "implements Listener" hinzu, damit das Plugin auf Events hören kann
 public class OrdersPlugin extends JavaPlugin implements Listener {
@@ -22,6 +25,15 @@ public class OrdersPlugin extends JavaPlugin implements Listener {
         deliverManager = new DeliverManager(this);
         buy = new Buy(this, dataManager);
         gui = new GUI(this, dataManager, buy);
+
+        // --- DEIN NEUER AH CODE START ---
+        AhManager ahManager = new AhManager(this);
+        AhGUI ahGui = new AhGUI(this, ahManager);
+        getServer().getPluginManager().registerEvents(ahGui, this);
+        if (getCommand("ah") != null) {
+            getCommand("ah").setExecutor(new AhCommand(ahGui));
+        }
+        // --- DEIN NEUER AH CODE ENDE ---
 
         if (getCommand("orders") != null) {
             getCommand("orders").setExecutor(new Commands(gui));

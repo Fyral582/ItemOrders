@@ -52,7 +52,7 @@ public class GUI implements Listener {
                 inv.setItem(48, createButton(Material.BOOK, "§b§lMeine Orders", "§7Hier findest du auch", "§7abgeschlossene Orders zur Abholung."));
                 inv.setItem(49, createButton(Material.EMERALD, "§a§lOrder erstellen"));
                 inv.setItem(50, createButton(Material.SUNFLOWER, "§e§lAktualisieren", "§7Klicke zum Neuladen."));
-                inv.setItem(53, createButton(Material.WRITABLE_BOOK, "§6§lPlugin Information", "§7Plugin erstellt von: §eFyral"));
+                inv.setItem(53, createButton(Material.WRITABLE_BOOK, "§6§lPlugin Information", "§7Plugin erstellt von: §eFyral", "§7Getestet von: §eFyral §7und §eSchneeemillll"));
                 p.openInventory(inv);
             });
         });
@@ -291,6 +291,20 @@ public class GUI implements Listener {
         }
     }
 
+    // --- NEU: Verhindert, dass echte Schilder das Plugin auslösen ---
+    @EventHandler
+    public void onBlockPlace(org.bukkit.event.block.BlockPlaceEvent e) {
+        // Wenn der Spieler einen echten Block platziert, ist er definitiv
+        // nicht mehr im Plugin-Menü -> Sitzung löschen!
+        activeSessions.remove(e.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
+    public void onPlayerQuit(org.bukkit.event.player.PlayerQuitEvent e) {
+        // Räumt den Zwischenspeicher auf, wenn jemand offline geht
+        activeSessions.remove(e.getPlayer().getUniqueId());
+    }
+
     private void removeRewardFromManager(int orderId, Material mat, int amount) {
         List<DeliverManager.ItemStackData> rewards = plugin.getDeliverManager().getRewards(orderId);
         for (DeliverManager.ItemStackData rew : rewards) {
@@ -418,9 +432,19 @@ public class GUI implements Listener {
         Player p = e.getPlayer();
         OrderSession s = activeSessions.get(p.getUniqueId());
         if (s == null) return;
-        Bukkit.getScheduler().runTask(plugin, () -> e.getBlock().setType(Material.AIR));
+
         String input = e.getLine(0).trim();
-        if (input.isEmpty()) return;
+
+        // Wenn der Spieler ESC gedrückt hat oder das Schild leer lässt: Abbrechen!
+        if (input.isEmpty()) {
+            activeSessions.remove(p.getUniqueId());
+            p.sendMessage("§cOrder-Eingabe abgebrochen.");
+            return;
+        }
+
+        // Erst jetzt, wo wir sicher sind, dass es eine Plugin-Eingabe ist,
+        // löschen wir das virtuelle Block-Schild.
+        Bukkit.getScheduler().runTask(plugin, () -> e.getBlock().setType(Material.AIR));
 
         Bukkit.getScheduler().runTask(plugin, () -> {
             switch (s.step) {

@@ -6,4 +6,6 @@ author: Fyral
 commands:
   orders:
     description: Öffnet das Handelsmenü.
-    aliases: [order] # <--- Das hier hinzufügen!
+    aliases: [order]
+  ah:
+    description: Öffnet das Auktionshaus.
