@@ -22,7 +22,16 @@ public class DeliverManager {
     }
 
     public void setup() {
-        file = new File(plugin.getDataFolder(), "rewards.yml");
+        // 1. Wir definieren den neuen Unterordner 'orders'
+        File ordersFolder = new File(plugin.getDataFolder(), "orders");
+
+        // 2. Erstelle den Unterordner, falls er nicht existiert
+        if (!ordersFolder.exists()) {
+            ordersFolder.mkdirs();
+        }
+
+        // 3. Speichere die Datei IM neuen Unterordner
+        file = new File(ordersFolder, "rewards.yml");
         if (!file.exists()) {
             try { file.createNewFile(); } catch (IOException e) { e.printStackTrace(); }
         }

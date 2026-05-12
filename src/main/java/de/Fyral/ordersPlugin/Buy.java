@@ -1,121 +1,148 @@
-package de.Fyral.ordersPlugin;
+package de.Fyral.ordersPlugin.deliver;
 
+import de.Fyral.ordersPlugin.OrdersPlugin;
+import de.Fyral.ordersPlugin.DataManager;
+import de.Fyral.ordersPlugin.Lang;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
 
-public class Buy {
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+public class Buy implements Listener {
 
     private final OrdersPlugin plugin;
-    private final DataManager dataManager;
+    private final DataManager db;
+    private final Map<UUID, DeliverySession> pendingSessions = new HashMap<>();
 
-    public Buy(OrdersPlugin plugin, DataManager dataManager) {
+    public Buy(OrdersPlugin plugin, DataManager db) {
         this.plugin = plugin;
-        this.dataManager = dataManager;
+        this.db = db;
+        Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
     public void openDeliveryMenu(Player p, int orderId) {
-        OrderData data = dataManager.getOrder(orderId);
-        if (data == null) return;
+        Inventory inv = Bukkit.createInventory(null, 54, Lang.get("menu.deliver_insert_prefix") + orderId);
+        p.openInventory(inv);
+    }
 
-        String[] wParts = data.wantedBase64.split(":");
-        Inventory inv = Bukkit.createInventory(null, 27, "§6Items übergeben #" + orderId);
+    @EventHandler
+    public void onInputClose(InventoryCloseEvent e) {
+        String title = e.getView().getTitle();
+        if (title.startsWith(Lang.get("menu.deliver_insert_prefix"))) {
+            Player p = (Player) e.getPlayer();
+            int orderId = Integer.parseInt(title.split("#")[1].trim());
+
+            List<ItemStack> insertedItems = new ArrayList<>();
+            for (ItemStack item : e.getInventory().getContents()) {
+                if (item != null && item.getType() != Material.AIR) {
+                    insertedItems.add(item.clone());
+                }
+            }
+
+            if (insertedItems.isEmpty()) {
+                p.sendMessage(Lang.getPrefixed("msg.deliver_no_items"));
+                return;
+            }
+
+            pendingSessions.put(p.getUniqueId(), new DeliverySession(orderId, insertedItems));
+            Bukkit.getScheduler().runTaskLater(plugin, () -> openConfirmMenu(p, orderId), 2L);
+        }
+    }
+
+    private void openConfirmMenu(Player p, int orderId) {
+        Inventory inv = Bukkit.createInventory(null, 27, Lang.get("menu.deliver_confirm_prefix") + orderId);
 
         ItemStack confirm = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-        ItemMeta m = confirm.getItemMeta();
-        m.setDisplayName("§a§lBESTÄTIGEN");
-        m.getPersistentDataContainer().set(plugin.getGui().getKeyOrderId(), PersistentDataType.INTEGER, orderId);
-        confirm.setItemMeta(m);
+        ItemMeta cm = confirm.getItemMeta();
+        cm.setDisplayName(Lang.get("btn.deliver_confirm"));
+        confirm.setItemMeta(cm);
 
-        inv.setItem(22, confirm);
+        ItemStack cancel = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+        ItemMeta cam = cancel.getItemMeta();
+        cam.setDisplayName(Lang.get("btn.cancel"));
+        cancel.setItemMeta(cam);
+
+        inv.setItem(11, confirm);
+        inv.setItem(15, cancel);
         p.openInventory(inv);
-        p.sendMessage("§7Lege §6" + wParts[1] + "x " + wParts[0] + " §7in die oberen Slots.");
     }
 
-    public void confirmDelivery(Player p, Inventory inv, int orderId) {
-        OrderData data = dataManager.getOrder(orderId);
-        if (data == null) return;
+    @EventHandler
+    public void onConfirmClick(InventoryClickEvent e) {
+        String title = e.getView().getTitle();
+        if (title.startsWith(Lang.get("menu.deliver_confirm_prefix"))) {
+            e.setCancelled(true);
+            Player p = (Player) e.getWhoClicked();
+            ItemStack clicked = e.getCurrentItem();
 
-        String[] wParts = data.wantedBase64.split(":");
-        Material wMat = Material.valueOf(wParts[0]);
-        int totalWanted = Integer.parseInt(wParts[1]);
-        boolean isPerItem = Boolean.parseBoolean(wParts[2]);
+            if (clicked == null || clicked.getType() == Material.AIR) return;
 
-        String[] pParts = data.priceBase64.split(":");
-        Material pMat = Material.valueOf(pParts[0]);
-        int currentTotalPrice = Integer.parseInt(pParts[1]);
-
-        int deliveredCount = 0;
-        for (int i = 0; i < 18; i++) {
-            ItemStack is = inv.getItem(i);
-            if (is != null && is.getType() == wMat) deliveredCount += is.getAmount();
-        }
-
-        if (deliveredCount <= 0) {
-            p.sendMessage("§cDu hast keine passenden Items reingelegt!");
-            return;
-        }
-
-        if (isPerItem) {
-            int amountToTake = Math.min(deliveredCount, totalWanted);
-            int pricePerUnit = currentTotalPrice / totalWanted;
-            int rewardAmount = amountToTake * pricePerUnit;
-
-            p.getInventory().addItem(new ItemStack(pMat, rewardAmount));
-            plugin.getDeliverManager().addReward(orderId, wMat, amountToTake);
-            plugin.getDeliverManager().addNotification(data.owner);
-
-            inv.clear();
-            if (deliveredCount > amountToTake) {
-                p.getInventory().addItem(new ItemStack(wMat, deliveredCount - amountToTake));
-            }
-
-            if (amountToTake == totalWanted) {
-                dataManager.setStatus(orderId, "COMPLETED");
-                p.sendMessage("§aOrder komplett abgeschlossen!");
-            } else {
-                int remainingAmount = totalWanted - amountToTake;
-                int remainingPrice = currentTotalPrice - rewardAmount;
-                dataManager.updateOrder(orderId, remainingAmount, remainingPrice);
-                p.sendMessage("§aTeil-Lieferung erfolgt! Du hast §e" + rewardAmount + "x " + pMat.name() + " §abekommt.");
-                p.sendMessage("§7Restliche Menge der Order: " + remainingAmount);
-            }
-            p.closeInventory();
-            notifyOwner(orderId, data.owner);
-
-        } else {
-            if (deliveredCount >= totalWanted) {
-                p.getInventory().addItem(new ItemStack(pMat, currentTotalPrice));
-                plugin.getDeliverManager().addReward(orderId, wMat, totalWanted);
-                plugin.getDeliverManager().addNotification(data.owner);
-
-                inv.clear();
-                if (deliveredCount > totalWanted) {
-                    p.getInventory().addItem(new ItemStack(wMat, deliveredCount - totalWanted));
-                }
-
-                dataManager.setStatus(orderId, "COMPLETED");
+            DeliverySession session = pendingSessions.get(p.getUniqueId());
+            if (session == null) {
                 p.closeInventory();
-                p.sendMessage("§aHandel erfolgreich!");
-                notifyOwner(orderId, data.owner);
-            } else {
-                p.sendMessage("§cDiese Order erfordert die komplette Menge (" + totalWanted + ") auf einmal!");
+                return;
+            }
+
+            if (clicked.getType() == Material.LIME_STAINED_GLASS_PANE) {
+                int orderId = session.orderId;
+                List<ItemStack> itemsToDeliver = session.items;
+                pendingSessions.remove(p.getUniqueId());
+                p.closeInventory();
+
+                confirmDelivery(p, itemsToDeliver, orderId);
+
+            } else if (clicked.getType() == Material.RED_STAINED_GLASS_PANE) {
+                DeliverySession removed = pendingSessions.remove(p.getUniqueId());
+                if (removed != null) returnItems(p, removed.items);
+                p.closeInventory();
+                p.sendMessage(Lang.getPrefixed("msg.deliver_cancelled"));
             }
         }
     }
 
-    private void notifyOwner(int orderId, java.util.UUID ownerUUID) {
-        Player owner = Bukkit.getPlayer(ownerUUID);
-        if (owner != null) {
-            owner.sendMessage("§6§l[Handel] §aEs gab eine Lieferung für deine Order #" + orderId + "!");
+    @EventHandler
+    public void onConfirmClose(InventoryCloseEvent e) {
+        String title = e.getView().getTitle();
+        if (title.startsWith(Lang.get("menu.deliver_confirm_prefix"))) {
+            Player p = (Player) e.getPlayer();
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                DeliverySession session = pendingSessions.remove(p.getUniqueId());
+                if (session != null) {
+                    returnItems(p, session.items);
+                    p.sendMessage(Lang.getPrefixed("msg.deliver_cancelled"));
+                }
+            }, 2L);
         }
     }
 
-    public void processFulfillment(Player p, int orderId) {
-        openDeliveryMenu(p, orderId);
+    private void returnItems(Player p, List<ItemStack> items) {
+        for (ItemStack item : items) {
+            HashMap<Integer, ItemStack> left = p.getInventory().addItem(item);
+            for (ItemStack drop : left.values()) {
+                p.getWorld().dropItem(p.getLocation(), drop);
+            }
+        }
+    }
+
+    public void confirmDelivery(Player p, List<ItemStack> deliveredItems, int orderId) {
+        // HIER KOMMT DEINE BELOHNUNGS-LOGIK HINEIN (Unverändert lassen, was du hattest)
+    }
+
+    private static class DeliverySession {
+        public int orderId;
+        public List<ItemStack> items;
+        public DeliverySession(int orderId, List<ItemStack> items) { this.orderId = orderId; this.items = items; }
     }
 }

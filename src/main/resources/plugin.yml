@@ -1,7 +1,7 @@
-name: Orders
-version: 1.0
+name: TradeLink
+version: 1.1
 main: de.Fyral.ordersPlugin.OrdersPlugin
-api-version: 1.21
+api-version: '1.21'
 author: Fyral
 commands:
   orders:

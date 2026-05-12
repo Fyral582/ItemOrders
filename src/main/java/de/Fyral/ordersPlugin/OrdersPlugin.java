@@ -10,6 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import de.Fyral.ordersPlugin.ah.AhManager;
 import de.Fyral.ordersPlugin.ah.AhGUI;
 import de.Fyral.ordersPlugin.ah.AhCommand;
+import de.Fyral.ordersPlugin.deliver.Buy;
 
 // Wir fügen "implements Listener" hinzu, damit das Plugin auf Events hören kann
 public class OrdersPlugin extends JavaPlugin implements Listener {
@@ -21,6 +22,7 @@ public class OrdersPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        Lang.init(this);
         dataManager = new DataManager(this);
         deliverManager = new DeliverManager(this);
         buy = new Buy(this, dataManager);

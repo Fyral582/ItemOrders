@@ -2,14 +2,15 @@ package de.Fyral.ordersPlugin;
 
 import de.Fyral.ordersPlugin.createorder.*;
 import de.Fyral.ordersPlugin.deliver.DeliverManager;
+import de.rapha149.signgui.SignGUI;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -21,11 +22,11 @@ public class GUI implements Listener {
 
     private final OrdersPlugin plugin;
     private final DataManager db;
-    private final Buy buy;
+    private final de.Fyral.ordersPlugin.deliver.Buy buy;
     private final NamespacedKey keyOrderId, keyMaterial, keyPage;
     private final Map<UUID, OrderSession> activeSessions = new HashMap<>();
 
-    public GUI(OrdersPlugin plugin, DataManager db, Buy buy) {
+    public GUI(OrdersPlugin plugin, DataManager db, de.Fyral.ordersPlugin.deliver.Buy buy) {
         this.plugin = plugin;
         this.db = db;
         this.buy = buy;
@@ -35,7 +36,7 @@ public class GUI implements Listener {
     }
 
     public void openMainMenu(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 54, "§8▶ §6Alle Orders");
+        Inventory inv = Bukkit.createInventory(null, 54, Lang.get("menu.orders_main"));
         activeSessions.remove(p.getUniqueId());
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -49,17 +50,18 @@ public class GUI implements Listener {
                         if (display != null) inv.setItem(slot++, display);
                     }
                 }
-                inv.setItem(48, createButton(Material.BOOK, "§b§lMeine Orders", "§7Hier findest du auch", "§7abgeschlossene Orders zur Abholung."));
-                inv.setItem(49, createButton(Material.EMERALD, "§a§lOrder erstellen"));
-                inv.setItem(50, createButton(Material.SUNFLOWER, "§e§lAktualisieren", "§7Klicke zum Neuladen."));
-                inv.setItem(53, createButton(Material.WRITABLE_BOOK, "§6§lPlugin Information", "§7Plugin erstellt von: §eFyral", "§7Getestet von: §eFyral §7und §eSchneeemillll"));
+                inv.setItem(48, createButton(Material.BOOK, Lang.get("btn.my_orders"), Lang.get("btn.my_orders_lore1"), Lang.get("btn.my_orders_lore2")));
+                inv.setItem(49, createButton(Material.EMERALD, Lang.get("btn.create_order")));
+                inv.setItem(50, createButton(Material.SUNFLOWER, Lang.get("btn.refresh"), Lang.get("btn.refresh_lore")));
+                inv.setItem(51, createButton(Material.WRITABLE_BOOK, Lang.get("btn.info"), Lang.get("btn.info_lore1"), Lang.get("btn.info_lore2")));
+
                 p.openInventory(inv);
             });
         });
     }
 
     public void openMyOrders(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 54, "§8▶ §bMeine Orders");
+        Inventory inv = Bukkit.createInventory(null, 54, Lang.get("menu.my_orders"));
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             List<OrderData> orders = db.getAllOrders();
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -70,7 +72,7 @@ public class GUI implements Listener {
                         if (display != null) inv.setItem(slot++, display);
                     }
                 }
-                inv.setItem(49, createButton(Material.ARROW, "§7Zurück", "§7Zum Hauptmenü"));
+                inv.setItem(49, createButton(Material.ARROW, Lang.get("btn.back"), Lang.get("btn.back_lore")));
                 p.openInventory(inv);
             });
         });
@@ -79,33 +81,23 @@ public class GUI implements Listener {
     public void openManageMenu(Player p, int orderId) {
         OrderData data = db.getOrder(orderId);
         if (data == null) return;
-
-        Inventory inv = Bukkit.createInventory(null, 27, "§8▶ §6Order verwalten #" + orderId);
-
+        Inventory inv = Bukkit.createInventory(null, 27, Lang.get("menu.manage_order_prefix") + orderId);
         if (data.status.equals("ACTIVE")) {
-            ItemStack cancelBtn = createButton(Material.RED_WOOL, "§c§lORDER ABBRECHEN");
-            ItemMeta cm = cancelBtn.getItemMeta();
-            cm.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId);
-            cancelBtn.setItemMeta(cm);
+            ItemStack cancelBtn = createButton(Material.RED_WOOL, Lang.get("btn.cancel_order"));
+            ItemMeta cm = cancelBtn.getItemMeta(); cm.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId); cancelBtn.setItemMeta(cm);
             inv.setItem(11, cancelBtn);
         }
-
-        ItemStack chestBtn = createButton(Material.CHEST, "§a§lORDER-KISTE ÖFFNEN", "§7Items einzeln entnehmen.");
-        ItemMeta chm = chestBtn.getItemMeta();
-        chm.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId);
-        chestBtn.setItemMeta(chm);
-
+        ItemStack chestBtn = createButton(Material.CHEST, Lang.get("btn.open_chest"), Lang.get("btn.open_chest_lore"));
+        ItemMeta chm = chestBtn.getItemMeta(); chm.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId); chestBtn.setItemMeta(chm);
         inv.setItem(15, chestBtn);
-        inv.setItem(18, createButton(Material.ARROW, "§7Zurück"));
+        inv.setItem(18, createButton(Material.ARROW, Lang.get("btn.back")));
         p.openInventory(inv);
     }
 
     public void openOrderChest(Player p, int orderId, int page) {
-        Inventory inv = Bukkit.createInventory(null, 54, "§8▶ §6Kiste #" + orderId + " | S." + (page + 1));
-
+        Inventory inv = Bukkit.createInventory(null, 54, Lang.get("menu.order_chest_prefix") + orderId + " | S." + (page + 1));
         List<DeliverManager.ItemStackData> rawRewards = plugin.getDeliverManager().getRewards(orderId);
         List<ItemStack> allItems = new ArrayList<>();
-
         for (DeliverManager.ItemStackData rew : rawRewards) {
             int amountLeft = rew.amount;
             while (amountLeft > 0) {
@@ -114,42 +106,24 @@ public class GUI implements Listener {
                 amountLeft -= stackSize;
             }
         }
-
         int start = page * 45;
         int end = Math.min(start + 45, allItems.size());
-
         int slot = 0;
-        for (int i = start; i < end; i++) {
-            inv.setItem(slot++, allItems.get(i));
-        }
-
+        for (int i = start; i < end; i++) inv.setItem(slot++, allItems.get(i));
         if (page > 0) {
-            ItemStack prev = createButton(Material.ARROW, "§7Vorherige Seite");
-            ItemMeta m = prev.getItemMeta();
-            m.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId);
-            m.getPersistentDataContainer().set(keyPage, PersistentDataType.INTEGER, page - 1);
-            prev.setItemMeta(m);
+            ItemStack prev = createButton(Material.ARROW, Lang.get("btn.prev_page"));
+            ItemMeta m = prev.getItemMeta(); m.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId); m.getPersistentDataContainer().set(keyPage, PersistentDataType.INTEGER, page - 1); prev.setItemMeta(m);
             inv.setItem(45, prev);
         }
         if (end < allItems.size()) {
-            ItemStack next = createButton(Material.ARROW, "§7Nächste Seite");
-            ItemMeta m = next.getItemMeta();
-            m.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId);
-            m.getPersistentDataContainer().set(keyPage, PersistentDataType.INTEGER, page + 1);
-            next.setItemMeta(m);
+            ItemStack next = createButton(Material.ARROW, Lang.get("btn.next_page"));
+            ItemMeta m = next.getItemMeta(); m.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId); m.getPersistentDataContainer().set(keyPage, PersistentDataType.INTEGER, page + 1); next.setItemMeta(m);
             inv.setItem(53, next);
         }
-
-        // HIER: Der Button heißt jetzt DROP ALL
-        ItemStack takeAll = createButton(Material.HOPPER, "§a§lDROP ALL", "§7Nimmt alle Items dieser Seite.", "§7(Inventar voll? Fliegt auf den Boden!)");
-        ItemMeta tm = takeAll.getItemMeta();
-        tm.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId);
-        tm.getPersistentDataContainer().set(keyPage, PersistentDataType.INTEGER, page);
-        takeAll.setItemMeta(tm);
-
+        ItemStack takeAll = createButton(Material.HOPPER, Lang.get("btn.take_all"), Lang.get("btn.take_all_lore1"), Lang.get("btn.take_all_lore2"));
+        ItemMeta tm = takeAll.getItemMeta(); tm.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, orderId); tm.getPersistentDataContainer().set(keyPage, PersistentDataType.INTEGER, page); takeAll.setItemMeta(tm);
         inv.setItem(48, takeAll);
-        inv.setItem(49, createButton(Material.BARRIER, "§cZurück zum Menü"));
-
+        inv.setItem(49, createButton(Material.BARRIER, Lang.get("btn.close_menu")));
         p.openInventory(inv);
     }
 
@@ -160,149 +134,135 @@ public class GUI implements Listener {
         String title = e.getView().getTitle();
         ItemStack clicked = e.getCurrentItem();
         if (clicked == null || clicked.getType() == Material.AIR) return;
-
         OrderSession s = activeSessions.get(p.getUniqueId());
 
-        if (title.contains("§8▶ §6Kiste #")) {
-            e.setCancelled(true); // Verhindert reinlegen
-            int orderId = Integer.parseInt(title.split("#")[1].split(" ")[0]);
-            int page = Integer.parseInt(title.split("S\\.")[1]) - 1;
-
-            if (clicked.getType() == Material.BARRIER) { openManageMenu(p, orderId); return; }
-
-            if (clicked.getType() == Material.ARROW) {
-                if (clicked.getItemMeta().getPersistentDataContainer().has(keyPage, PersistentDataType.INTEGER)) {
-                    int newPage = clicked.getItemMeta().getPersistentDataContainer().get(keyPage, PersistentDataType.INTEGER);
-                    openOrderChest(p, orderId, newPage);
-                }
-                return;
-            }
-
-            if (clicked.getType() == Material.HOPPER) {
-                claimPage(p, orderId, e.getInventory());
-                checkAndDeleteOrder(orderId);
-                openOrderChest(p, orderId, page);
-                return;
-            }
-
-            // HIER: Einzelnes Item rausnehmen mit Drop-Schutz
-            if (e.getSlot() < 45) {
-                ItemStack clickedItem = clicked.clone();
-                HashMap<Integer, ItemStack> left = p.getInventory().addItem(clickedItem);
-
-                if (!left.isEmpty()) {
-                    // Inventar voll -> Ab auf den Boden!
-                    for (ItemStack drop : left.values()) {
-                        p.getWorld().dropItemNaturally(p.getLocation(), drop);
-                    }
-                    p.sendMessage("§cInventar voll! Item wurde gedroppt.");
-                }
-
-                removeRewardFromManager(orderId, clicked.getType(), clicked.getAmount());
-                e.getInventory().setItem(e.getSlot(), null);
-                checkAndDeleteOrder(orderId);
-            }
-            return;
-        }
-
-        if (title.contains("§6Items übergeben")) {
-            if (e.getRawSlot() >= 18 && e.getRawSlot() <= 26) {
-                e.setCancelled(true);
-            }
-            if (clicked.getType() == Material.LIME_STAINED_GLASS_PANE) {
-                if (clicked.hasItemMeta() && clicked.getItemMeta().getPersistentDataContainer().has(keyOrderId, PersistentDataType.INTEGER)) {
-                    int id = clicked.getItemMeta().getPersistentDataContainer().get(keyOrderId, PersistentDataType.INTEGER);
-                    buy.confirmDelivery(p, e.getInventory(), id);
-                }
-            }
-            return;
-        }
-
-        if (title.contains("§8▶") || title.contains("Suchergebnisse") || title.contains("Auswahl")) {
+        if (title.startsWith(Lang.get("menu.order_chest_prefix"))) {
             e.setCancelled(true);
-
-            if (title.contains("verwalten")) {
-                if (clicked.getType() == Material.RED_WOOL) {
-                    cancelOrder(p, clicked.getItemMeta().getPersistentDataContainer().get(keyOrderId, PersistentDataType.INTEGER));
-                    return;
-                } else if (clicked.getType() == Material.CHEST) {
-                    openOrderChest(p, clicked.getItemMeta().getPersistentDataContainer().get(keyOrderId, PersistentDataType.INTEGER), 0);
-                    return;
-                }
+            int orderId = Integer.parseInt(title.split("#")[1].split("\\|")[0].trim());
+            int page = Integer.parseInt(title.split("S\\.")[1].trim()) - 1;
+            if (clicked.getType() == Material.BARRIER) { openManageMenu(p, orderId); return; }
+            if (clicked.getType() == Material.ARROW && clicked.getItemMeta().getPersistentDataContainer().has(keyPage, PersistentDataType.INTEGER)) {
+                openOrderChest(p, orderId, clicked.getItemMeta().getPersistentDataContainer().get(keyPage, PersistentDataType.INTEGER)); return;
             }
+            if (clicked.getType() == Material.HOPPER) {
+                claimPage(p, orderId, e.getInventory()); checkAndDeleteOrder(orderId); openOrderChest(p, orderId, page); return;
+            }
+            if (e.getSlot() < 45) {
+                HashMap<Integer, ItemStack> left = p.getInventory().addItem(clicked);
+                if (left.isEmpty()) {
+                    removeRewardFromManager(orderId, clicked.getType(), clicked.getAmount());
+                    e.getInventory().setItem(e.getSlot(), null); checkAndDeleteOrder(orderId);
+                } else { p.sendMessage(Lang.getPrefixed("msg.inv_full")); }
+            }
+            return;
+        }
 
+        if (title.contains("▶") || title.contains("Suchergebnisse") || title.contains("Auswahl")) {
+            e.setCancelled(true);
+            if (title.startsWith(Lang.get("menu.manage_order_prefix"))) {
+                if (clicked.getType() == Material.RED_WOOL) { cancelOrder(p, clicked.getItemMeta().getPersistentDataContainer().get(keyOrderId, PersistentDataType.INTEGER)); return; }
+                else if (clicked.getType() == Material.CHEST) { openOrderChest(p, clicked.getItemMeta().getPersistentDataContainer().get(keyOrderId, PersistentDataType.INTEGER), 0); return; }
+            }
             if (clicked.getType() == Material.SUNFLOWER) { openMainMenu(p); return; }
-            if (clicked.getItemMeta().getDisplayName().contains("Zurück")) { openMainMenu(p); return; }
-
+            if (clicked.getItemMeta().getDisplayName().contains(Lang.get("btn.back"))) { openMainMenu(p); return; }
             if (clicked.getType() == Material.ARROW && s != null) {
                 if (e.getSlot() == 53) { s.currentPage++; SearchGUI.showResults(p, s, this, title.contains("Bezahl-Item")); }
                 else if (e.getSlot() == 45 && s.currentPage > 0) { s.currentPage--; SearchGUI.showResults(p, s, this, title.contains("Bezahl-Item")); }
                 return;
             }
-
             if (clicked.getItemMeta().getPersistentDataContainer().has(keyOrderId, PersistentDataType.INTEGER)) {
                 int id = clicked.getItemMeta().getPersistentDataContainer().get(keyOrderId, PersistentDataType.INTEGER);
                 OrderData data = db.getOrder(id);
                 if (data != null) {
-                    if (data.owner.equals(p.getUniqueId())) {
-                        openManageMenu(p, id);
-                    } else if (data.status.equals("ACTIVE")) {
-                        buy.openDeliveryMenu(p, id);
-                    }
+                    if (data.owner.equals(p.getUniqueId())) openManageMenu(p, id);
+                    else if (data.status.equals("ACTIVE")) buy.openDeliveryMenu(p, id);
                 }
                 return;
             }
-
-            if (title.equals("§8▶ §6Alle Orders")) {
-                // Wichtig: Erst auf null prüfen, dann auf Typ!
-                if (clicked == null || clicked.getType() == Material.AIR) return;
-
+            if (title.equals(Lang.get("menu.orders_main"))) {
                 if (e.getSlot() == 49) {
                     activeSessions.put(p.getUniqueId(), new OrderSession());
-                    SignGUI.open(p, "Welches Item?", plugin);
+                    promptSign(p, Lang.get("msg.sign_search_item"), Lang.get("msg.sign_search_hint"));
                 }
-                else if (e.getSlot() == 48) {
-                    openMyOrders(p);
-                }
-                // Der Klickschutz für das Buch:
-                else if (clicked.getType() == Material.WRITABLE_BOOK) {
-                    // p.sendMessage("§7Dieses Plugin wurde mit Herz von Fyral erstellt!");
-                    return;
-                }
+                else if (e.getSlot() == 48) openMyOrders(p);
             }
             else if (title.contains("Suchergebnisse") || title.contains("Auswahl")) { handleSelection(p, s, clicked); }
-            // HIER: Text auf "Bezahlungs Item" geändert
-            else if (title.equals("§8▶ §aPreis-Modus wählen")) { s.isPerItem = (e.getSlot() == 11); s.step = 2; SignGUI.open(p, "Bezahlungs Item", plugin); }
-            else if (title.equals("§8▶ §aBestätigung") && e.getSlot() == 11) completeOrderCreation(p, s);
-        }
-    }
-
-    @EventHandler
-    public void onInventoryClose(org.bukkit.event.inventory.InventoryCloseEvent e) {
-        if (e.getView().getTitle().contains("§6Items übergeben")) {
-            Player p = (Player) e.getPlayer();
-            Inventory inv = e.getInventory();
-            for (int i = 0; i < 18; i++) {
-                ItemStack item = inv.getItem(i);
-                if (item != null && item.getType() != Material.AIR) {
-                    p.getInventory().addItem(item);
-                }
+            else if (title.equals(Lang.get("menu.price_mode"))) {
+                s.isPerItem = (e.getSlot() == 11);
+                s.step = 2;
+                promptSign(p, Lang.get("msg.sign_search_pay_item"), Lang.get("msg.sign_search_pay_hint"));
             }
+            else if (title.equals(Lang.get("menu.confirm_order")) && e.getSlot() == 11) completeOrderCreation(p, s);
         }
     }
 
-    // --- NEU: Verhindert, dass echte Schilder das Plugin auslösen ---
-    @EventHandler
-    public void onBlockPlace(org.bukkit.event.block.BlockPlaceEvent e) {
-        // Wenn der Spieler einen echten Block platziert, ist er definitiv
-        // nicht mehr im Plugin-Menü -> Sitzung löschen!
-        activeSessions.remove(e.getPlayer().getUniqueId());
+    private void promptSign(Player p, String line2, String line3) {
+        p.closeInventory();
+        try {
+            SignGUI.builder()
+                    .setLines("", "§8^^^^^^^^^^^^^^^", line2, line3)
+                    .setType(Material.OAK_SIGN)
+                    .setHandler((player, result) -> {
+                        String input = result.getLineWithoutColor(0).trim();
+                        if (input.isEmpty()) {
+                            activeSessions.remove(player.getUniqueId());
+                            player.sendMessage(Lang.getPrefixed("msg.creation_cancelled"));
+                            return Collections.emptyList();
+                        }
+                        Bukkit.getScheduler().runTask(plugin, () -> processSignInput(player, input));
+                        return Collections.emptyList();
+                    })
+                    .build().open(p);
+        } catch (Exception e) {
+            p.sendMessage(Lang.getPrefixed("msg.gui_error"));
+        }
+    }
+
+    private void processSignInput(Player p, String input) {
+        OrderSession s = activeSessions.get(p.getUniqueId());
+        if (s == null) return;
+        switch (s.step) {
+            case 0: searchItems(p, s, input, false); break;
+            case 1:
+                try { s.amount = Math.max(1, Integer.parseInt(input)); openModeMenu(p); }
+                catch (Exception ex) { p.sendMessage(Lang.getPrefixed("msg.enter_number")); activeSessions.remove(p.getUniqueId()); } break;
+            case 2: searchItems(p, s, input, true); break;
+            case 3:
+                try {
+                    int pr = Math.max(1, Integer.parseInt(input)); s.totalPaymentRequired = s.isPerItem ? (s.amount * pr) : pr; ConfirmGUI.open(p, s, this);
+                } catch (Exception ex) { p.sendMessage(Lang.getPrefixed("msg.enter_number")); activeSessions.remove(p.getUniqueId()); } break;
+        }
     }
 
     @EventHandler
-    public void onPlayerQuit(org.bukkit.event.player.PlayerQuitEvent e) {
-        // Räumt den Zwischenspeicher auf, wenn jemand offline geht
-        activeSessions.remove(e.getPlayer().getUniqueId());
+    public void onPlayerQuit(PlayerQuitEvent e) { activeSessions.remove(e.getPlayer().getUniqueId()); }
+
+    private void handleSelection(Player p, OrderSession s, ItemStack clicked) {
+        String matStr = clicked.getItemMeta().getPersistentDataContainer().get(keyMaterial, PersistentDataType.STRING);
+        if (matStr == null) return;
+        Material mat = Material.valueOf(matStr);
+        s.currentPage = 0;
+        if (s.step == 0) {
+            s.wantedMaterial = mat; s.step = 1; promptSign(p, Lang.get("msg.sign_amount"), Lang.get("msg.sign_amount_hint"));
+        } else if (s.step == 2) {
+            s.paymentMaterial = mat; s.step = 3; promptSign(p, s.isPerItem ? Lang.get("msg.sign_price_per") : Lang.get("msg.sign_price_total"), s.isPerItem ? Lang.get("msg.sign_price_hint1") : Lang.get("msg.sign_price_hint2"));
+        }
+    }
+
+    private void searchItems(Player p, OrderSession s, String input, boolean isPay) {
+        s.currentResults.clear();
+        String query = input.toUpperCase().replace(" ", "_");
+        for (Material m : Material.values()) { if (m.isItem() && m.name().contains(query)) s.currentResults.add(m); }
+        if (s.currentResults.isEmpty()) {
+            p.sendMessage(Lang.getPrefixed("msg.item_not_found")); activeSessions.remove(p.getUniqueId());
+        } else { SearchGUI.showResults(p, s, this, isPay); }
+    }
+
+    public void openModeMenu(Player p) {
+        Inventory inv = Bukkit.createInventory(null, 27, Lang.get("menu.price_mode"));
+        inv.setItem(11, createButton(Material.GOLD_NUGGET, Lang.get("btn.price_per_item")));
+        inv.setItem(15, createButton(Material.GOLD_INGOT, Lang.get("btn.price_total")));
+        p.openInventory(inv);
     }
 
     private void removeRewardFromManager(int orderId, Material mat, int amount) {
@@ -317,33 +277,22 @@ public class GUI implements Listener {
         plugin.getDeliverManager().setRewards(orderId, rewards);
     }
 
-    // HIER: Die neue claimPage Logik mit Drop-Schutz
     private void claimPage(Player p, int orderId, Inventory inv) {
         for (int i = 0; i < 45; i++) {
             ItemStack item = inv.getItem(i);
             if (item != null && item.getType() != Material.AIR) {
                 HashMap<Integer, ItemStack> left = p.getInventory().addItem(item);
-
-                if (!left.isEmpty()) {
-                    for (ItemStack drop : left.values()) {
-                        p.getWorld().dropItemNaturally(p.getLocation(), drop);
-                    }
-                }
-
-                removeRewardFromManager(orderId, item.getType(), item.getAmount());
-                inv.setItem(i, null);
+                if (left.isEmpty()) { removeRewardFromManager(orderId, item.getType(), item.getAmount()); inv.setItem(i, null); }
+                else { p.sendMessage(Lang.getPrefixed("msg.inv_full")); break; }
             }
         }
-        p.sendMessage("§aSeite abgeholt (Überschuss wurde gedroppt)!");
     }
 
     private void checkAndDeleteOrder(int orderId) {
         OrderData data = db.getOrder(orderId);
         if (data != null && !data.status.equals("ACTIVE")) {
             List<DeliverManager.ItemStackData> rew = plugin.getDeliverManager().getRewards(orderId);
-            if (rew.isEmpty()) {
-                db.deleteOrder(orderId);
-            }
+            if (rew.isEmpty()) db.deleteOrder(orderId);
         }
     }
 
@@ -353,146 +302,50 @@ public class GUI implements Listener {
             String[] pParts = data.priceBase64.split(":");
             plugin.getDeliverManager().addReward(id, Material.valueOf(pParts[0]), Integer.parseInt(pParts[1]));
             db.setStatus(id, "CANCELLED");
-            p.sendMessage("§cOrder abgebrochen! Hol deine Items in der Order-Kiste ab.");
+            p.sendMessage(Lang.getPrefixed("msg.order_cancel_success"));
             openManageMenu(p, id);
         }
     }
 
     private void completeOrderCreation(Player p, OrderSession s) {
-        if (!hasEnoughItems(p, s.paymentMaterial, s.totalPaymentRequired)) {
-            p.sendMessage("§cNicht genug Items!"); return;
-        }
+        if (!hasEnoughItems(p, s.paymentMaterial, s.totalPaymentRequired)) { p.sendMessage(Lang.getPrefixed("msg.not_enough_items")); return; }
         removeItems(p, s.paymentMaterial, s.totalPaymentRequired);
         p.updateInventory();
-
         db.createOrder(p.getUniqueId(), s.wantedMaterial.name(), s.amount, s.paymentMaterial.name(), s.totalPaymentRequired, s.isPerItem);
-
-        p.sendMessage("§aOrder erstellt!");
-        p.closeInventory();
-        openMainMenu(p);
+        p.sendMessage(Lang.getPrefixed("msg.order_created"));
+        p.closeInventory(); openMainMenu(p);
     }
 
     private ItemStack createOrderDisplayItem(Player viewer, OrderData data) {
         try {
-            String[] w = data.wantedBase64.split(":");
-            String[] pr = data.priceBase64.split(":");
-
-            Material wM = Material.valueOf(w[0]);
-            int wAmt = Integer.parseInt(w[1]);
-            boolean isPerItem = Boolean.parseBoolean(w[2]);
-
-            Material pM = Material.valueOf(pr[0]);
-            int pAmt = Integer.parseInt(pr[1]);
-
-            ItemStack i = new ItemStack(wM);
-            ItemMeta m = i.getItemMeta();
-            m.setDisplayName("§6Order #" + data.id);
-
+            String[] w = data.wantedBase64.split(":"); String[] pr = data.priceBase64.split(":");
+            Material wM = Material.valueOf(w[0]); int wAmt = Integer.parseInt(w[1]); boolean isPerItem = Boolean.parseBoolean(w[2]);
+            Material pM = Material.valueOf(pr[0]); int pAmt = Integer.parseInt(pr[1]);
+            ItemStack i = new ItemStack(wM); ItemMeta m = i.getItemMeta();
+            m.setDisplayName(Lang.get("order.name").replace("%id%", String.valueOf(data.id)));
             String ownerName = Bukkit.getOfflinePlayer(data.owner).getName();
             if (ownerName == null) ownerName = "Unbekannt";
-
             List<String> lore = new ArrayList<>();
-            lore.add("§7Erstellt von: §f" + ownerName);
-            lore.add("§7Gesucht: §a" + wAmt + "x " + wM);
-
+            lore.add(Lang.get("order.creator").replace("%name%", ownerName));
+            lore.add(Lang.get("order.wanted").replace("%amount%", String.valueOf(wAmt)).replace("%item%", wM.name()));
             if (isPerItem) {
-                int perItem = pAmt / wAmt;
-                lore.add("§7Preis pro Stück: §e" + perItem + "x " + pM);
-                lore.add("§b§l⚡ TEIL-LIEFERUNG MÖGLICH");
-                lore.add("§8(Gesamtpreis: " + pAmt + ")");
-            } else {
-                lore.add("§7Preis insgesamt: §e" + pAmt + "x " + pM);
-            }
-
+                lore.add(Lang.get("order.price_per").replace("%price%", String.valueOf(pAmt / wAmt)).replace("%currency%", pM.name()));
+                lore.add(Lang.get("order.partial_allowed"));
+                lore.add(Lang.get("order.total_price_info").replace("%price%", String.valueOf(pAmt)));
+            } else { lore.add(Lang.get("order.price_total").replace("%price%", String.valueOf(pAmt)).replace("%currency%", pM.name())); }
             lore.add("");
-            if (data.status.equals("COMPLETED")) {
-                lore.add("§a§lABGESCHLOSSEN - Bitte abholen!");
-            } else if (data.status.equals("CANCELLED")) {
-                lore.add("§c§lABGEBROCHEN - Bitte abholen!");
-            } else {
-                if (data.owner.equals(viewer.getUniqueId())) {
-                    lore.add("§6§lDEINE ORDER");
-                    lore.add("§e▶ Klicke zum Verwalten");
-                } else {
-                    lore.add("§a▶ Klicke zum Liefern");
-                }
+            if (data.status.equals("COMPLETED")) { lore.add(Lang.get("order.completed")); }
+            else if (data.status.equals("CANCELLED")) { lore.add(Lang.get("order.cancelled")); }
+            else {
+                if (data.owner.equals(viewer.getUniqueId())) { lore.add(Lang.get("order.yours")); lore.add(Lang.get("order.click_manage")); }
+                else { lore.add(Lang.get("order.click_deliver")); }
             }
-
-            m.setLore(lore);
-            m.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, data.id);
-            i.setItemMeta(m);
-            return i;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    @EventHandler
-    public void onSignDone(SignChangeEvent e) {
-        Player p = e.getPlayer();
-        OrderSession s = activeSessions.get(p.getUniqueId());
-        if (s == null) return;
-
-        String input = e.getLine(0).trim();
-
-        // Wenn der Spieler ESC gedrückt hat oder das Schild leer lässt: Abbrechen!
-        if (input.isEmpty()) {
-            activeSessions.remove(p.getUniqueId());
-            p.sendMessage("§cOrder-Eingabe abgebrochen.");
-            return;
-        }
-
-        // Erst jetzt, wo wir sicher sind, dass es eine Plugin-Eingabe ist,
-        // löschen wir das virtuelle Block-Schild.
-        Bukkit.getScheduler().runTask(plugin, () -> e.getBlock().setType(Material.AIR));
-
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            switch (s.step) {
-                case 0: searchItems(p, s, input, false); break;
-                case 1: try { s.amount = Math.max(1, Integer.parseInt(input)); openModeMenu(p); } catch (Exception ex) { p.sendMessage("§cZahl!"); } break;
-                case 2: searchItems(p, s, input, true); break;
-                case 3: try { int pr = Math.max(1, Integer.parseInt(input)); s.totalPaymentRequired = s.isPerItem ? (s.amount * pr) : pr; ConfirmGUI.open(p, s, this); } catch (Exception ex) { p.sendMessage("§cZahl!"); } break;
-            }
-        });
-    }
-
-    private void handleSelection(Player p, OrderSession s, ItemStack clicked) {
-        String matStr = clicked.getItemMeta().getPersistentDataContainer().get(keyMaterial, PersistentDataType.STRING);
-        if (matStr == null) return;
-        Material mat = Material.valueOf(matStr);
-        s.currentPage = 0;
-
-        if (s.step == 0) {
-            s.wantedMaterial = mat;
-            s.step = 1;
-            SignGUI.open(p, "Menge?", plugin);
-        } else if (s.step == 2) {
-            s.paymentMaterial = mat;
-            s.step = 3;
-            String schildText = s.isPerItem ? "Preis pro Item?" : "Gesamtpreis?";
-            SignGUI.open(p, schildText, plugin);
-        }
-    }
-
-    private void searchItems(Player p, OrderSession s, String input, boolean isPay) {
-        s.currentResults.clear();
-        String query = input.toUpperCase().replace(" ", "_");
-        for (Material m : Material.values()) { if (m.isItem() && m.name().contains(query)) s.currentResults.add(m); }
-        if (s.currentResults.isEmpty()) p.sendMessage("§cKein Item!");
-        else SearchGUI.showResults(p, s, this, isPay);
-    }
-
-    public void openModeMenu(Player p) {
-        Inventory inv = Bukkit.createInventory(null, 27, "§8▶ §aPreis-Modus wählen");
-        inv.setItem(11, createButton(Material.GOLD_NUGGET, "§b§lPRO ITEM"));
-        inv.setItem(15, createButton(Material.GOLD_INGOT, "§e§lINSGESAMT"));
-        p.openInventory(inv);
+            m.setLore(lore); m.getPersistentDataContainer().set(keyOrderId, PersistentDataType.INTEGER, data.id); i.setItemMeta(m); return i;
+        } catch (Exception e) { return null; }
     }
 
     private boolean hasEnoughItems(Player p, Material mat, int amount) {
-        int count = 0;
-        for (ItemStack is : p.getInventory().getContents()) { if (is != null && is.getType() == mat) count += is.getAmount(); }
-        return count >= amount;
+        int count = 0; for (ItemStack is : p.getInventory().getContents()) { if (is != null && is.getType() == mat) count += is.getAmount(); } return count >= amount;
     }
 
     private void removeItems(Player p, Material mat, int amount) {
@@ -507,10 +360,10 @@ public class GUI implements Listener {
         }
     }
 
+    // HIER IST DER FIX: Die Methode ist jetzt public!
     public ItemStack createButton(Material m, String name, String... lore) {
         ItemStack i = new ItemStack(m); ItemMeta mt = i.getItemMeta(); mt.setDisplayName(name);
-        if (lore.length > 0) mt.setLore(Arrays.asList(lore));
-        i.setItemMeta(mt); return i;
+        if (lore.length > 0) mt.setLore(Arrays.asList(lore)); i.setItemMeta(mt); return i;
     }
 
     public NamespacedKey getKeyMaterial() { return keyMaterial; }

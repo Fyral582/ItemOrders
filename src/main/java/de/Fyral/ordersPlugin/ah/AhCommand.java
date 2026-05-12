@@ -6,6 +6,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import de.Fyral.ordersPlugin.Lang;
 
 public class AhCommand implements CommandExecutor {
 
@@ -28,7 +29,7 @@ public class AhCommand implements CommandExecutor {
 
         if (args[0].equalsIgnoreCase("sell")) {
             if (args.length != 3) {
-                p.sendMessage("§cNutzung: /ah sell <Währung> <Anzahl>");
+                p.sendMessage(Lang.getPrefixed("msg.ah_usage"));
                 return true;
             }
 
