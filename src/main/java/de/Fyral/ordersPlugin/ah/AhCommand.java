@@ -21,9 +21,16 @@ public class AhCommand implements CommandExecutor {
         if (!(sender instanceof Player)) return true;
         Player p = (Player) sender;
 
+        // Wenn er nur "/ah" eingibt (ohne Argumente) -> Standard Menü
         if (args.length == 0) {
-            // Öffnet das Menü auf Seite 0 (Erste Seite)
-            ahGui.openMainMenu(p, 0);
+            ahGui.openMainMenu(p, 0, ""); // Leerer String bedeutet: Keine Suche
+            return true;
+        }
+
+        // NEU: Die Suchfunktion! Z.B. "/ah diamond"
+        if (args.length == 1 && !args[0].equalsIgnoreCase("sell")) {
+            String searchQuery = args[0].toUpperCase();
+            ahGui.openMainMenu(p, 0, searchQuery); // Öffnet das Menü gefiltert
             return true;
         }
 
@@ -35,19 +42,19 @@ public class AhCommand implements CommandExecutor {
 
             Material currency = Material.matchMaterial(args[1].toUpperCase());
             if (currency == null || !currency.isItem()) {
-                p.sendMessage("§cUngültiges Bezahl-Item!");
+                p.sendMessage(Lang.getPrefixed("msg.invalid_currency"));
                 return true;
             }
 
             int amount;
             try { amount = Integer.parseInt(args[2]); } catch (Exception e) {
-                p.sendMessage("§cBitte eine gültige Zahl angeben!");
+                p.sendMessage(Lang.getPrefixed("msg.enter_number"));
                 return true;
             }
 
             ItemStack hand = p.getInventory().getItemInMainHand();
             if (hand == null || hand.getType() == Material.AIR) {
-                p.sendMessage("§cDu musst ein Item in der Hand halten!");
+                p.sendMessage(Lang.getPrefixed("msg.hold_item"));
                 return true;
             }
 

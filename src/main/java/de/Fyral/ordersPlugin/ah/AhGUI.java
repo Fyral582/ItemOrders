@@ -19,12 +19,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 
 public class AhGUI implements Listener {
 
     private final OrdersPlugin plugin;
     private final AhManager ahManager;
-    private final NamespacedKey keyAhId, keyAhPrice, keyAhCurrency, keyAhPage;
+    private final NamespacedKey keyAhId, keyAhPrice, keyAhCurrency, keyAhPage, keyAhSearch;
 
     public AhGUI(OrdersPlugin plugin, AhManager ahManager) {
         this.plugin = plugin;
@@ -33,18 +34,48 @@ public class AhGUI implements Listener {
         this.keyAhPrice = new NamespacedKey(plugin, "ah_price");
         this.keyAhCurrency = new NamespacedKey(plugin, "ah_currency");
         this.keyAhPage = new NamespacedKey(plugin, "ah_page");
+        this.keyAhSearch = new NamespacedKey(plugin, "ah_search");
     }
 
-    public void openMainMenu(Player p, int page) {
+    private String formatTimeLeft(long timestamp) {
+        int configDays = plugin.getConfig().getInt("ah_expiration_days", 7);
+        long expiresAt = timestamp + (configDays * 24L * 60 * 60 * 1000);
+        long timeLeft = expiresAt - System.currentTimeMillis();
+
+        if (timeLeft <= 0) return "0m";
+
+        long days = timeLeft / (1000 * 60 * 60 * 24);
+        long hours = (timeLeft / (1000 * 60 * 60)) % 24;
+        long minutes = (timeLeft / (1000 * 60)) % 60;
+
+        if (days > 0) return Lang.get("ah.time_days").replace("%d%", String.valueOf(days)).replace("%h%", String.valueOf(hours));
+        if (hours > 0) return Lang.get("ah.time_hours").replace("%h%", String.valueOf(hours)).replace("%m%", String.valueOf(minutes));
+        return Lang.get("ah.time_minutes").replace("%m%", String.valueOf(minutes));
+    }
+
+    public void openMainMenu(Player p, int page, String searchQuery) {
         Inventory inv = Bukkit.createInventory(null, 54, Lang.get("menu.ah_main_prefix") + (page + 1));
 
-        List<AhItem> items = ahManager.getAllItems();
+        List<AhItem> allItems = ahManager.getAllItems();
+        List<AhItem> filteredItems = new ArrayList<>();
+
+        for (AhItem ahItem : allItems) {
+            if (searchQuery == null || searchQuery.isEmpty()) {
+                filteredItems.add(ahItem);
+            } else {
+                ItemStack original = ahManager.itemFromBase64(ahItem.itemBase64);
+                if (original.getType().name().contains(searchQuery.toUpperCase())) {
+                    filteredItems.add(ahItem);
+                }
+            }
+        }
+
         int start = page * 45;
-        int end = Math.min(start + 45, items.size());
+        int end = Math.min(start + 45, filteredItems.size());
         int slot = 0;
 
         for (int i = start; i < end; i++) {
-            AhItem ahItem = items.get(i);
+            AhItem ahItem = filteredItems.get(i);
             ItemStack original = ahManager.itemFromBase64(ahItem.itemBase64);
             ItemStack display = original.clone();
             ItemMeta meta = display.getItemMeta();
@@ -56,6 +87,8 @@ public class AhGUI implements Listener {
             lore.add("§8§m----------------------");
             lore.add(Lang.get("ah.seller").replace("%name%", sellerName));
             lore.add(Lang.get("ah.price").replace("%price%", String.valueOf(ahItem.price)).replace("%currency%", ahItem.currency.name()));
+
+            lore.add(Lang.get("ah.expires_in").replace("%time%", formatTimeLeft(ahItem.timestamp)));
             lore.add("");
 
             if (ahItem.seller.equals(p.getUniqueId())) lore.add(Lang.get("ah.click_remove"));
@@ -68,19 +101,33 @@ public class AhGUI implements Listener {
             inv.setItem(slot++, display);
         }
 
+        String queryToSave = (searchQuery == null) ? "" : searchQuery;
+
         if (page > 0) {
             ItemStack prev = createButton(Material.ARROW, Lang.get("btn.prev_page"));
-            ItemMeta m = prev.getItemMeta(); m.getPersistentDataContainer().set(keyAhPage, PersistentDataType.INTEGER, page - 1); prev.setItemMeta(m);
+            ItemMeta m = prev.getItemMeta();
+            m.getPersistentDataContainer().set(keyAhPage, PersistentDataType.INTEGER, page - 1);
+            m.getPersistentDataContainer().set(keyAhSearch, PersistentDataType.STRING, queryToSave);
+            prev.setItemMeta(m);
             inv.setItem(45, prev);
         }
-        if (end < items.size()) {
+        if (end < filteredItems.size()) {
             ItemStack next = createButton(Material.ARROW, Lang.get("btn.next_page"));
-            ItemMeta m = next.getItemMeta(); m.getPersistentDataContainer().set(keyAhPage, PersistentDataType.INTEGER, page + 1); next.setItemMeta(m);
+            ItemMeta m = next.getItemMeta();
+            m.getPersistentDataContainer().set(keyAhPage, PersistentDataType.INTEGER, page + 1);
+            m.getPersistentDataContainer().set(keyAhSearch, PersistentDataType.STRING, queryToSave);
+            next.setItemMeta(m);
             inv.setItem(53, next);
         }
 
         inv.setItem(48, createButton(Material.CHEST_MINECART, Lang.get("btn.ah_collection"), Lang.get("btn.ah_collection_lore")));
-        inv.setItem(49, createButton(Material.SUNFLOWER, Lang.get("btn.refresh")));
+
+        ItemStack refreshBtn = createButton(Material.SUNFLOWER, Lang.get("btn.refresh"));
+        ItemMeta rm = refreshBtn.getItemMeta();
+        rm.getPersistentDataContainer().set(keyAhSearch, PersistentDataType.STRING, queryToSave);
+        refreshBtn.setItemMeta(rm);
+        inv.setItem(49, refreshBtn);
+
         inv.setItem(50, createButton(Material.WRITABLE_BOOK, Lang.get("btn.info"), Lang.get("btn.info_lore1"), Lang.get("btn.info_lore2")));
 
         p.openInventory(inv);
@@ -100,6 +147,9 @@ public class AhGUI implements Listener {
                 amountLeft -= stackSize;
             }
         }
+
+        List<ItemStack> expiredItems = ahManager.getExpiredItems(p.getUniqueId());
+        allItems.addAll(expiredItems);
 
         int start = page * 45;
         int end = Math.min(start + 45, allItems.size());
@@ -190,7 +240,7 @@ public class AhGUI implements Listener {
 
                 p.sendMessage(Lang.getPrefixed("msg.ah_item_added"));
                 p.closeInventory();
-                openMainMenu(p, 0);
+                openMainMenu(p, 0, "");
             } else if (clicked.getType() == Material.RED_STAINED_GLASS_PANE) {
                 p.closeInventory();
             }
@@ -199,14 +249,14 @@ public class AhGUI implements Listener {
 
         if (title.startsWith(Lang.get("menu.ah_buy_confirm_prefix"))) {
             e.setCancelled(true);
-            if (clicked.getType() == Material.RED_STAINED_GLASS_PANE) { openMainMenu(p, 0); return; }
+            if (clicked.getType() == Material.RED_STAINED_GLASS_PANE) { openMainMenu(p, 0, ""); return; }
             if (clicked.getType() == Material.LIME_STAINED_GLASS_PANE) {
                 int id = clicked.getItemMeta().getPersistentDataContainer().get(keyAhId, PersistentDataType.INTEGER);
                 AhItem ahItem = ahManager.getItem(id);
 
                 if (ahItem == null) {
                     p.sendMessage(Lang.getPrefixed("msg.ah_already_bought"));
-                    openMainMenu(p, 0); return;
+                    openMainMenu(p, 0, ""); return;
                 }
 
                 if (hasEnoughItems(p, ahItem.currency, ahItem.price)) {
@@ -222,10 +272,10 @@ public class AhGUI implements Listener {
 
                     ahManager.removeItem(id);
                     p.sendMessage(Lang.getPrefixed("msg.ah_buy_success"));
-                    openMainMenu(p, 0);
+                    openMainMenu(p, 0, "");
                 } else {
                     p.sendMessage(Lang.getPrefixed("msg.ah_not_enough_currency").replace("%currency%", ahItem.currency.name()));
-                    openMainMenu(p, 0);
+                    openMainMenu(p, 0, "");
                 }
             }
             return;
@@ -233,54 +283,95 @@ public class AhGUI implements Listener {
 
         if (title.startsWith(Lang.get("menu.ah_chest_prefix"))) {
             e.setCancelled(true);
-            int page = Integer.parseInt(title.split("S\\.")[1].trim()) - 1;
 
-            if (clicked.getType() == Material.BARRIER) { openMainMenu(p, 0); return; }
+            // Blockiert Klicks in das eigene Inventar!
+            if (e.getClickedInventory() != e.getView().getTopInventory()) return;
+
+            // HIER WAR DER FEHLER! Sprachen-unabhängige Seiten-Auslese:
+            int page = 0;
+            try {
+                String[] parts = title.split(" ");
+                page = Integer.parseInt(parts[parts.length - 1]) - 1;
+            } catch (Exception ignored) {}
+
+            if (clicked.getType() == Material.BARRIER) { openMainMenu(p, 0, ""); return; }
             if (clicked.getType() == Material.ARROW && clicked.hasItemMeta() && clicked.getItemMeta().getPersistentDataContainer().has(keyAhPage, PersistentDataType.INTEGER)) {
                 openAhChest(p, clicked.getItemMeta().getPersistentDataContainer().get(keyAhPage, PersistentDataType.INTEGER)); return;
             }
             if (clicked.getType() == Material.HOPPER) {
-                claimAhPage(p, e.getInventory());
-                openAhChest(p, page); return;
+                claimAhPage(p, e.getInventory(), page);
+                return;
             }
 
             if (e.getSlot() < 45) {
-                HashMap<Integer, ItemStack> left = p.getInventory().addItem(clicked);
+                ItemStack cloneToGive = clicked.clone();
+                HashMap<Integer, ItemStack> left = p.getInventory().addItem(cloneToGive);
+
                 if (left.isEmpty()) {
-                    removeAhReward(p.getUniqueId(), clicked.getType(), clicked.getAmount());
-                    e.getInventory().setItem(e.getSlot(), null);
-                } else { p.sendMessage(Lang.getPrefixed("msg.inv_full")); }
+                    removeFromChestBackend(p.getUniqueId(), clicked);
+                    openAhChest(p, page); // Läd sofort neu!
+                } else {
+                    p.sendMessage(Lang.getPrefixed("msg.inv_full"));
+                }
             }
             return;
         }
 
         if (title.startsWith(Lang.get("menu.ah_main_prefix").split("\\|")[0].trim())) {
             e.setCancelled(true);
+
+            if (e.getClickedInventory() != e.getView().getTopInventory()) return;
+
+            // HIER AUCH: Sprachen-unabhängig!
             int currentPage = 0;
-            if (title.contains("S.")) currentPage = Integer.parseInt(title.split("S\\.")[1].trim()) - 1;
+            try {
+                String[] parts = title.split(" ");
+                currentPage = Integer.parseInt(parts[parts.length - 1]) - 1;
+            } catch (Exception ignored) {}
+
+            String currentSearch = "";
+            if (clicked.hasItemMeta() && clicked.getItemMeta().getPersistentDataContainer().has(keyAhSearch, PersistentDataType.STRING)) {
+                currentSearch = clicked.getItemMeta().getPersistentDataContainer().get(keyAhSearch, PersistentDataType.STRING);
+            }
 
             if (clicked.getType() == Material.CHEST_MINECART) { openAhChest(p, 0); return; }
-            if (clicked.getType() == Material.SUNFLOWER) { openMainMenu(p, currentPage); return; }
+            if (clicked.getType() == Material.SUNFLOWER) { openMainMenu(p, currentPage, currentSearch); return; }
             if (clicked.getType() == Material.ARROW && clicked.hasItemMeta() && clicked.getItemMeta().getPersistentDataContainer().has(keyAhPage, PersistentDataType.INTEGER)) {
-                openMainMenu(p, clicked.getItemMeta().getPersistentDataContainer().get(keyAhPage, PersistentDataType.INTEGER)); return;
+                openMainMenu(p, clicked.getItemMeta().getPersistentDataContainer().get(keyAhPage, PersistentDataType.INTEGER), currentSearch); return;
             }
 
             if (clicked.hasItemMeta() && clicked.getItemMeta().getPersistentDataContainer().has(keyAhId, PersistentDataType.INTEGER)) {
                 int id = clicked.getItemMeta().getPersistentDataContainer().get(keyAhId, PersistentDataType.INTEGER);
                 AhItem ahItem = ahManager.getItem(id);
-                if (ahItem == null) { p.sendMessage(Lang.getPrefixed("msg.ah_item_missing")); openMainMenu(p, currentPage); return; }
+                if (ahItem == null) { p.sendMessage(Lang.getPrefixed("msg.ah_item_missing")); openMainMenu(p, currentPage, currentSearch); return; }
 
                 if (ahItem.seller.equals(p.getUniqueId())) {
                     ahManager.removeItem(id);
-                    HashMap<Integer, ItemStack> left = p.getInventory().addItem(ahManager.itemFromBase64(ahItem.itemBase64));
-                    if (!left.isEmpty()) p.getWorld().dropItem(p.getLocation(), left.get(0));
-                    p.sendMessage(Lang.getPrefixed("msg.ah_item_removed"));
-                    openMainMenu(p, currentPage);
+
+                    ItemStack original = ahManager.itemFromBase64(ahItem.itemBase64);
+                    HashMap<Integer, ItemStack> left = p.getInventory().addItem(original.clone());
+
+                    if (left.isEmpty()) {
+                        String msgInv = Lang.getPrefixed("msg.ah_item_removed_inv");
+                        if (msgInv == null || msgInv.contains("msg.ah_item_removed_inv")) msgInv = "§aDas Item wurde zurück in dein Inventar gelegt.";
+                        p.sendMessage(msgInv);
+                    } else {
+                        List<ItemStack> expired = ahManager.getExpiredItems(p.getUniqueId());
+                        expired.add(left.get(0));
+                        ahManager.setExpiredItems(p.getUniqueId(), expired);
+
+                        String msgChest = Lang.getPrefixed("msg.ah_item_removed_chest");
+                        if (msgChest == null || msgChest.contains("msg.ah_item_removed_chest")) msgChest = "§eDein Inventar ist voll! Das Item liegt in der Abholstation.";
+                        p.sendMessage(msgChest);
+                    }
+
+                    openMainMenu(p, currentPage, currentSearch);
                 } else {
                     ItemStack displayItem = clicked.clone();
                     ItemMeta meta = displayItem.getItemMeta();
                     if (meta != null && meta.hasLore()) {
                         List<String> lore = meta.getLore();
+                        lore.remove(lore.size() - 1);
                         lore.remove(lore.size() - 1);
                         meta.setLore(lore);
                         displayItem.setItemMeta(meta);
@@ -302,28 +393,47 @@ public class AhGUI implements Listener {
         }
     }
 
-    private void removeAhReward(java.util.UUID uuid, Material mat, int amount) {
+    private void removeFromChestBackend(UUID uuid, ItemStack clicked) {
+        List<ItemStack> expired = ahManager.getExpiredItems(uuid);
+        for (int i = 0; i < expired.size(); i++) {
+            if (expired.get(i).getType() == clicked.getType() && expired.get(i).getAmount() == clicked.getAmount()) {
+                expired.remove(i);
+                ahManager.setExpiredItems(uuid, expired);
+                return;
+            }
+        }
+
         List<AhManager.AhReward> rewards = ahManager.getRewards(uuid);
         for (AhManager.AhReward rew : rewards) {
-            if (rew.mat == mat) {
-                if (rew.amount >= amount) { rew.amount -= amount; break; }
-                else { amount -= rew.amount; rew.amount = 0; }
+            if (rew.mat == clicked.getType()) {
+                if (rew.amount >= clicked.getAmount()) {
+                    rew.amount -= clicked.getAmount();
+                    break;
+                }
             }
         }
         rewards.removeIf(r -> r.amount <= 0);
         ahManager.setRewards(uuid, rewards);
     }
 
-    private void claimAhPage(Player p, Inventory inv) {
+    private void claimAhPage(Player p, Inventory inv, int page) {
+        boolean changed = false;
         for (int i = 0; i < 45; i++) {
             ItemStack item = inv.getItem(i);
             if (item != null && item.getType() != Material.AIR) {
-                HashMap<Integer, ItemStack> left = p.getInventory().addItem(item);
+                ItemStack cloneToGive = item.clone();
+                HashMap<Integer, ItemStack> left = p.getInventory().addItem(cloneToGive);
                 if (left.isEmpty()) {
-                    removeAhReward(p.getUniqueId(), item.getType(), item.getAmount());
-                    inv.setItem(i, null);
-                } else { p.sendMessage(Lang.getPrefixed("msg.inv_full")); break; }
+                    removeFromChestBackend(p.getUniqueId(), item);
+                    changed = true;
+                } else {
+                    p.sendMessage(Lang.getPrefixed("msg.inv_full"));
+                    break;
+                }
             }
+        }
+        if (changed) {
+            openAhChest(p, page);
         }
     }
 

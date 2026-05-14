@@ -70,6 +70,12 @@ ah:
   price: "&7Preis: &e%price%x %currency%"
   click_remove: "&c▶ Klicke zum Entfernen"
   click_buy: "&a▶ Klicke zum Kaufen"
+  ah_item_removed_inv: "&aDas Item wurde zurück in dein Inventar gelegt."
+  ah_item_removed_chest: "&eDein Inventar ist voll! Das Item wurde in deine Abholstation gelegt."
+  expires_in: "&7Expires in: &e%time%"
+  time_days: "%d%d %h%h"
+  time_hours: "%h%h %m%m"
+  time_minutes: "%m%m"
 
 msg:
   inv_full: "&cDein Inventar ist voll!"
@@ -101,3 +107,5 @@ msg:
   sign_price_hint1: "&eStück?"
   sign_price_hint2: "&eALLE Items?"
   gui_error: "&cFehler beim Öffnen des Schilder-Menüs."
+  invalid_currency: "&cUngültiges Bezahl-Item!"
+  hold_item: "&cDu musst ein Item in der Hand halten!"

@@ -70,6 +70,12 @@ ah:
   price: "&7Price: &e%price%x %currency%"
   click_remove: "&c▶ Click to remove"
   click_buy: "&a▶ Click to buy"
+  ah_item_removed_inv: "&aThe item was returned to your inventory."
+  ah_item_removed_chest: "&eYour inventory is full! The item was placed in your collection bin."
+  expires_in: "&7Expires in: &e%time%"
+  time_days: "%dd %dh"
+  time_hours: "%dh %dm"
+  stime_minutes: "%dm"
 
 msg:
   inv_full: "&cYour inventory is full!"
@@ -101,3 +107,5 @@ msg:
   sign_price_hint1: "&eitem?"
   sign_price_hint2: "&eALL items?"
   gui_error: "&cError opening the sign menu."
+  invalid_currency: "&cInvalid payment item!"
+  hold_item: "&cYou must hold an item in your hand!"

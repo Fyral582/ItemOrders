@@ -4,3 +4,5 @@
 # Choose your language. Available by default: en, de
 # You can create your own language files in the /lang/ folder!
 language: en
+# You can set here how long an item should be in AH before removed.
+ah_expiration_days: 7

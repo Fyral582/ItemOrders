@@ -24,7 +24,7 @@ dependencies {
 }
 
 shadowJar {
-    archiveFileName.set("TradeLink.jar")
+    archiveFileName.set("TradeLink-${project.version}.jar")
 }
 
 // Schaltet die Erstellung der nutzlosen "normalen" Jar ab

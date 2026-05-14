@@ -35,6 +35,42 @@ public class AhManager {
             try { file.createNewFile(); } catch (IOException e) { e.printStackTrace(); }
         }
         config = YamlConfiguration.loadConfiguration(file);
+
+        checkExpirations();
+    }
+
+    private long getExpirationMillis() {
+        int days = plugin.getConfig().getInt("ah_expiration_days", 7);
+        return days * 24L * 60 * 60 * 1000;
+    }
+
+    public void checkExpirations() {
+        long now = System.currentTimeMillis();
+        long expirationMillis = getExpirationMillis();
+        boolean changed = false;
+
+        if (!config.contains("items")) return;
+
+        for (String key : config.getConfigurationSection("items").getKeys(false)) {
+            String path = "items." + key;
+            long timestamp = config.getLong(path + ".timestamp", now);
+
+            if (now - timestamp > expirationMillis) {
+                String sellerStr = config.getString(path + ".seller");
+                String itemBase64 = config.getString(path + ".item");
+
+                List<String> expiredList = config.getStringList("expired." + sellerStr);
+                expiredList.add(itemBase64);
+                config.set("expired." + sellerStr, expiredList);
+
+                config.set(path, null);
+                changed = true;
+            } else if (!config.contains(path + ".timestamp")) {
+                config.set(path + ".timestamp", now);
+                changed = true;
+            }
+        }
+        if (changed) save();
     }
 
     public void addItem(UUID seller, ItemStack item, Material currency, int price) {
@@ -44,6 +80,7 @@ public class AhManager {
         config.set(path + ".item", itemToBase64(item));
         config.set(path + ".currency", currency.name());
         config.set(path + ".price", price);
+        config.set(path + ".timestamp", System.currentTimeMillis());
         config.set("next_id", id + 1);
         save();
     }
@@ -56,12 +93,16 @@ public class AhManager {
     public AhItem getItem(int id) {
         if (!config.contains("items." + id)) return null;
         String path = "items." + id;
+
+        long timestamp = config.getLong(path + ".timestamp", System.currentTimeMillis());
+
         return new AhItem(
                 id,
                 UUID.fromString(config.getString(path + ".seller")),
                 config.getString(path + ".item"),
                 Material.valueOf(config.getString(path + ".currency")),
-                config.getInt(path + ".price")
+                config.getInt(path + ".price"),
+                timestamp
         );
     }
 
@@ -75,7 +116,6 @@ public class AhManager {
         return list;
     }
 
-    // --- NEU: AH-ABHOLSTATION LOGIK ---
     public void addReward(UUID seller, Material mat, int amount) {
         List<String> rewards = config.getStringList("rewards." + seller.toString());
         rewards.add(mat.name() + ":" + amount);
@@ -102,12 +142,30 @@ public class AhManager {
         save();
     }
 
+    // HIER IST DER WICHTIGE TEIL: Es gibt wieder eine List<ItemStack> zurück!
+    public List<ItemStack> getExpiredItems(UUID seller) {
+        List<ItemStack> list = new ArrayList<>();
+        List<String> raw = config.getStringList("expired." + seller.toString());
+        for (String base64 : raw) {
+            list.add(itemFromBase64(base64));
+        }
+        return list;
+    }
+
+    public void setExpiredItems(UUID seller, List<ItemStack> remaining) {
+        List<String> raw = new ArrayList<>();
+        for (ItemStack item : remaining) {
+            raw.add(itemToBase64(item));
+        }
+        config.set("expired." + seller.toString(), raw.isEmpty() ? null : raw);
+        save();
+    }
+
     public static class AhReward {
         public Material mat;
         public int amount;
         public AhReward(Material m, int a) { this.mat = m; this.amount = a; }
     }
-    // ----------------------------------
 
     private void save() {
         try { config.save(file); } catch (IOException e) { e.printStackTrace(); }
